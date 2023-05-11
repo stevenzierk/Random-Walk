@@ -1,6 +1,6 @@
 from collections import defaultdict
 import itertools
-from sympy import Matrix, Rational
+import numpy as np
 
 def get_box_vars(dimensions):
 	locs = list(itertools.product(*[range((-dim // 2) + 1, (dim // 2) + 1) for dim in dimensions]))
@@ -45,16 +45,40 @@ def get_neighbors(locs, steps):
 
 	return neighbors
 
+def calculate_escape_e(locs, neighbors, start, probs):
+	steps = 0
+	expected_steps = 0
+	multiplier = 1 / len(neighbors[start])
+
+	while probs['escape'] < 1 - 1e-12: 
+		newProbs = defaultdict(lambda: 0)
+		for loc in locs:
+			loc_neighbors = neighbors[loc]
+			for loc_neighbor in loc_neighbors:
+				newProbs[loc_neighbor] += multiplier * probs[loc]
+
+		steps += 1
+		expected_steps += steps * (newProbs['escape'])
+		newProbs['escape'] += probs['escape']
+		probs = newProbs
+		if (steps & (steps - 1)) == 0:
+			print ("At step " + str(steps) + " there is probability " + f"{probs['escape']:.10f}" + " of having escaped.")
+			
+	print ("Total steps run: " + str(steps))
+	print ("Expected steps to escape: " + str(expected_steps))
+
+	return expected_steps
+
 def develop_markov_matrix(locs, neighbors):
-	markov_matrix = Matrix([[Rational(0) for i in range(len(locs))] for j in range(len(locs))])
+	markov_matrix = [[0 for i in range(len(locs))] for j in range(len(locs))]
 	states_map = {value: index for index, value in enumerate(locs)}
-	multiplier = Rational(1, len(neighbors[locs[0]]))
+	multiplier = 1 / len(neighbors[locs[0]])
 
 	for loc in locs:
 		for neighbor in neighbors[loc]:
 			if neighbor != 'escape':
 				row, col = states_map[loc], states_map[neighbor]
-				markov_matrix[row, col] += multiplier
+				markov_matrix[row][col] += multiplier
 
 	return markov_matrix 
 
@@ -62,17 +86,17 @@ def develop_markov_matrix(locs, neighbors):
 LOCS_P1 = [(-3, 2), (3, 2), (-3, 1), (-2, 1), (-1, 1), (0, 1), (1, 1), (2, 1), (3, 1), (-3, 0), (-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0), (3, 0), (-1, -1), (0, -1), (1, -1), (-1, -2), (0, -2), (1, -2), (-1, -3), (0, -3), (1, -3)]
 
 
-#box_dims = [9, 9]
+#box_dims = [5, 5]
 #locs, neighbors, start, probs = get_box_vars(box_dims)
+#calculate_escape_e(locs, neighbors, start, probs)
 
 locs = LOCS_P1
 locs, neighbors, start, probs = get_shape_vars(locs)
 
 num_locs = len(locs)
-markov_matrix = develop_markov_matrix(locs, neighbors)
-print (markov_matrix)
-fundamental_matrix = (Matrix.eye(num_locs) - markov_matrix)
-expectations = fundamental_matrix.LUsolve(Matrix.ones(num_locs, 1))
+markov_matrix = np.array(develop_markov_matrix(locs, neighbors))
+fundamental_matrix = np.linalg.inv(np.eye(num_locs) - markov_matrix)
+expectations = np.matmul(fundamental_matrix, np.ones((num_locs, 1)))
 for loc, expectation in zip(locs, expectations):
 	print (loc, expectation)
 
